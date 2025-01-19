@@ -30,8 +30,10 @@ class Knapsack_Heuristic:
         model.M = pyo.RangeSet(1, self.nK) # RangeSate Knapsack
 
         # Parameter Declarations
+        # Store the initial benefits in a separate list
+        initial_benefits = self.benefit.copy()  # Create a copy of the initial benefit values
         def c_init(model, j):
-            return self.benefit[j-1] 
+            return initial_benefits[j - 1]  # Use initial values for parameter initialization 
         model.c = pyo.Param(model.N, initialize = c_init, mutable = True) # Benefit 
 
         def a_init(model, i, j):
@@ -70,27 +72,36 @@ class Knapsack_Heuristic:
     
         selectedItems = set() # At the current iteration.
         ItemsPool = set() # At the union of all iterations.
+        item_selection_count = {i: 0 for i in model.N}  # Initialize a counter for each item
+       
         
         start_time = time.time() # the start time of algorithm
-        
         elapsed_time = 0
 
         # Phase1
         # Solve the penalized LP relaxation
         iteration = 1
         
-        while(iteration <= self.MaxLpIter and elapsed_time < self.cpu_time_limit):
+        while(iteration <= self.MaxLpIter and elapsed_time<self.cpu_time_limit):
             
             
             results = solver.solve(model) 
             selectedItems = selection() 
             ItemsPool = ItemsPool.union(selectedItems)
+            
+            # Reset benefit to initial values
+            for item in model.N:
+                model.c[item] = initial_benefits[item - 1]  
+            
+            # Apply penalty by reducing the benefit of selected items     
             for item in selectedItems: 
-                model.c[item] *= self.PenaltiyRate
+                item_selection_count[item] += 1                
+                model.c[item] *= (1 - self.PenaltiyRate * item_selection_count[item])
                 
+       # Update the iteration counter and elapsed time         
             iteration += 1
-            end_time = time.time()    
-            elapsed_time = end_time - start_time  # calculating the total time
+        end_time = time.time()    
+        elapsed_time = end_time - start_time  # calculating the total time
             
         obj_value = int(pyo.value(model.obj))
         condition = results.solver.termination_condition
@@ -101,9 +112,10 @@ class Knapsack_Heuristic:
  
         
         return ItemsPoolList, len(ItemsPool) , elapsed_time , obj_value , condition
-    
+            
+
     def write_excel(self, LP_penaltiy_rate, LP_max_iteration, LP_min_value, len_ItemsPool , run_id , category \
-                    , problem_num , run_number , elapsed_time , obj_value , condition):
+                    , problem_num , run_number , elapsed_time , obj_value , condition,sheet_name):
         
         file_path = 'input_output/output.xlsx'
 
@@ -124,5 +136,23 @@ class Knapsack_Heuristic:
                     'condition':condition,
                     }
 
-        df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
-        df.to_excel(file_path, index=False)
+         # Convert new_data to a DataFrame
+        new_data_df = pd.DataFrame([new_data])
+
+        try:
+            # Read existing sheets in the Excel file
+            with pd.ExcelWriter(file_path, engine="openpyxl", mode="a", if_sheet_exists="overlay") as writer:
+                try:
+                    existing_data = pd.read_excel(file_path, sheet_name=sheet_name)
+                    # Concatenate existing data with the new data
+                    updated_data = pd.concat([existing_data, new_data_df], ignore_index=True)
+                except ValueError:
+                    # If the sheet doesn't exist, create a new one
+                    updated_data = new_data_df
+                
+                # Write the updated data back to the sheet
+                updated_data.to_excel(writer, index=False, sheet_name=sheet_name)
+        except FileNotFoundError:
+            # If the file doesn't exist, create a new one with the given sheet
+            with pd.ExcelWriter(file_path, engine="openpyxl") as writer:
+                new_data_df.to_excel(writer, index=False, sheet_name=sheet_name)

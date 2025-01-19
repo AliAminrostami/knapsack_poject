@@ -2,24 +2,20 @@
 import pyomo.environ as pyo
 from pyomo.opt import SolverStatus, TerminationCondition
 import numpy as np
-import pandas as pd
-import time
-from datetime import datetime
 
 class Knapsack_Heuristic:
 
-    def __init__(self, LP_penaltiy_rate, LP_max_iteration, LP_min_value, nI, nK , Profits, Weights, Capacity , cpu_time_limit):
-        
+    def __init__(self, LP_penaltiy_rate, LP_max_percentage, LP_min_value, nI, nK , Profits, Weights, Capacity):
+
         self.PenaltiyRate = LP_penaltiy_rate
-        self.MaxLpIter = LP_max_iteration
+        self.MaxLpperc = LP_max_percentage
         self.MinValue = LP_min_value
         self.nI = nI   # number of items
         self.nK = nK   # number of knapstacks
         self.benefit = Profits
         self.weight = Weights
         self.capacity = Capacity
-        self.cpu_time_limit = cpu_time_limit
-        
+
     def optimize(self):  
 
         # Model Definition
@@ -56,7 +52,7 @@ class Knapsack_Heuristic:
         model.con = pyo.Constraint(model.M, rule = con_rule)
 
         # creat the solver
-        solver = pyo.SolverFactory('cplex')
+        solver = pyo.SolverFactory('glpk')
         # solver.solve(model)
  
         # Selected items function
@@ -70,59 +66,22 @@ class Knapsack_Heuristic:
     
         selectedItems = set() # At the current iteration.
         ItemsPool = set() # At the union of all iterations.
-        
-        start_time = time.time() # the start time of algorithm
-        
-        elapsed_time = 0
 
         # Phase1
         # Solve the penalized LP relaxation
-        iteration = 1
-        
-        while(iteration <= self.MaxLpIter and elapsed_time < self.cpu_time_limit):
-            
-            
-            results = solver.solve(model) 
+        #iteration = 1
+        while((len(ItemsPool)/self.nI) < self.MaxLpperc):
+#tt
+            solver.solve(model) 
             selectedItems = selection() 
             ItemsPool = ItemsPool.union(selectedItems)
             for item in selectedItems: 
                 model.c[item] *= self.PenaltiyRate
-                
-            iteration += 1
-            end_time = time.time()    
-            elapsed_time = end_time - start_time  # calculating the total time
-            
-        obj_value = int(pyo.value(model.obj))
-        condition = results.solver.termination_condition
-        
+
+            #iteration += 1
+
         ItemsPoolList = np.zeros(self.nI)
         for item in ItemsPool: 
             ItemsPoolList[item-1] = 1
  
-        
-        return ItemsPoolList, len(ItemsPool) , elapsed_time , obj_value , condition
-    
-    def write_excel(self, LP_penaltiy_rate, LP_max_iteration, LP_min_value, len_ItemsPool , run_id , category \
-                    , problem_num , run_number , elapsed_time , obj_value , condition):
-        
-        file_path = 'input_output/output.xlsx'
-
-        df = pd.read_excel(file_path)
-        new_data = {'run_id': run_id,
-                    'category': category, 
-                    'problem_num': problem_num, 
-                    'run_number': run_number,                    
-                    'nK': self.nK,
-                    'nI': self.nI,
-                    'cpu_time_limit': self.cpu_time_limit, 
-                    'LP_penaltiy_rate': LP_penaltiy_rate,
-                    'LP_max_iteration': LP_max_iteration,
-                    'LP_min_value': LP_min_value,
-                    'LP_len_pool_items': len_ItemsPool,
-                    'elapsed_time': elapsed_time,
-                    'obj_value': obj_value,
-                    'condition':condition,
-                    }
-
-        df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
-        df.to_excel(file_path, index=False)
+        return ItemsPoolList, len(ItemsPool)

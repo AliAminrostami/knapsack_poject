@@ -75,7 +75,7 @@ class Knapsack_Heuristic:
         
         elapsed_time = 0
 
-        # Phase1
+        
         # Solve the penalized LP relaxation
         #iteration = 1
         
@@ -91,8 +91,8 @@ class Knapsack_Heuristic:
         end_time = time.time()    
         elapsed_time = end_time - start_time  # calculating the total time
             
-        optimal_solution = int(pyo.value(model.obj))
-        solution_condition = results.solver.termination_condition
+        obj_value = int(pyo.value(model.obj))
+        condition = results.solver.termination_condition
             #iteration += 1
         
         ItemsPoolList = np.zeros(self.nI)
@@ -100,10 +100,10 @@ class Knapsack_Heuristic:
             ItemsPoolList[item-1] = 1
  
         
-        return ItemsPoolList, len(ItemsPool) , elapsed_time , optimal_solution , solution_condition
+        return ItemsPoolList, len(ItemsPool) , elapsed_time , obj_value , condition
     
     def write_excel(self, LP_penaltiy_rate, LP_max_percentage, LP_min_value, len_ItemsPool , run_id , category \
-                    , problem_num , run_number , elapsed_time , optimal_solution , solution_condition):
+                    , problem_num , run_number , elapsed_time , obj_value , condition,sheet_name):
         
         file_path = 'input_output/output.xlsx'
 
@@ -120,9 +120,27 @@ class Knapsack_Heuristic:
                     'LP_min_value': LP_min_value,
                     'LP_len_pool_items': len_ItemsPool,
                     'elapsed_time': elapsed_time,
-                    'optimal_solution': optimal_solution,
-                    'solution_condition':solution_condition,
+                    'obj_value': obj_value,
+                    'condition':condition,
                     }
 
-        df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
-        df.to_excel(file_path, index=False)
+         # Convert new_data to a DataFrame
+        new_data_df = pd.DataFrame([new_data])
+
+        try:
+            # Read existing sheets in the Excel file
+            with pd.ExcelWriter(file_path, engine="openpyxl", mode="a", if_sheet_exists="overlay") as writer:
+                try:
+                    existing_data = pd.read_excel(file_path, sheet_name=sheet_name)
+                    # Concatenate existing data with the new data
+                    updated_data = pd.concat([existing_data, new_data_df], ignore_index=True)
+                except ValueError:
+                    # If the sheet doesn't exist, create a new one
+                    updated_data = new_data_df
+                
+                # Write the updated data back to the sheet
+                updated_data.to_excel(writer, index=False, sheet_name=sheet_name)
+        except FileNotFoundError:
+            # If the file doesn't exist, create a new one with the given sheet
+            with pd.ExcelWriter(file_path, engine="openpyxl") as writer:
+                new_data_df.to_excel(writer, index=False, sheet_name=sheet_name)
